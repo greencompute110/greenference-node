@@ -66,6 +66,11 @@ class Settings(BaseModel):
     ssh_port_range_start: int = Field(default=30000, ge=1024)
     ssh_port_range_end: int = Field(default=31000, ge=1025)
 
+    # Auth mode: "hotkey" (ed25519, production) or "hmac" (shared secret, dev)
+    auth_mode: str = "hmac"
+    # Bittensor hotkey seed URI for ed25519 signing (e.g. "//Alice" or wallet seed)
+    hotkey_uri: str | None = None
+
     # Auth (optional, for route protection)
     agent_auth_secret: str | None = None
     inference_auth_secret: str | None = None
@@ -105,6 +110,8 @@ def load_settings() -> Settings:
         ssh_host=os.getenv("GREENFERENCE_SSH_HOST", "127.0.0.1"),
         ssh_port_range_start=int(os.getenv("GREENFERENCE_SSH_PORT_RANGE_START", "30000")),
         ssh_port_range_end=int(os.getenv("GREENFERENCE_SSH_PORT_RANGE_END", "31000")),
+        auth_mode=os.getenv("GREENFERENCE_AUTH_MODE", "hmac"),
+        hotkey_uri=os.getenv("GREENFERENCE_HOTKEY_URI") or None,
         agent_auth_secret=os.getenv("GREENFERENCE_AGENT_AUTH_SECRET") or None,
         inference_auth_secret=os.getenv("GREENFERENCE_INFERENCE_AUTH_SECRET") or None,
         compute_auth_secret=os.getenv("GREENFERENCE_COMPUTE_AUTH_SECRET") or None,
