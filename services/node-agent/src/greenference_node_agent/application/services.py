@@ -340,12 +340,15 @@ class NodeAgentService:
         })
         self.repository.upsert_runtime(runtime)
 
-        # TODO: Phase 2 full implementation — start Firecracker VM.
+        try:
+            runtime = self.vm_backend.start_vm(runtime, workload)
+        except VMError as exc:
+            logger.exception("VM start failed for %s", runtime.deployment_id)
+            self._fail_runtime(runtime, str(exc))
+            return
+
         runtime = runtime.model_copy(update={
-            "status": "ready",
-            "current_stage": "ready",
             "endpoint": f"{self.settings.miner_api_base_url}/vms/{runtime.deployment_id}",
-            "updated_at": _utcnow(),
         })
         self.repository.upsert_runtime(runtime)
         self._report_deployment_ready(runtime)
