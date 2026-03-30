@@ -132,6 +132,19 @@ def get_runtime(
     return runtime.model_dump(mode="json")
 
 
+@router.get("/agent/v1/deployments/{deployment_id}/ssh")
+def get_ssh_access(
+    deployment_id: str,
+    include_private_key: bool = False,
+    x_agent_auth: str | None = Header(default=None, alias="X-Agent-Auth"),
+) -> dict:
+    validate_optional_auth(x_agent_auth, _cfg().agent_auth_secret)
+    access = _svc().get_ssh_access(deployment_id, include_private_key=include_private_key)
+    if access is None:
+        raise HTTPException(status_code=404, detail="SSH access not available for this deployment")
+    return access.model_dump(mode="json")
+
+
 @router.delete("/agent/v1/deployments/{deployment_id}/terminate")
 def terminate_deployment(
     deployment_id: str,

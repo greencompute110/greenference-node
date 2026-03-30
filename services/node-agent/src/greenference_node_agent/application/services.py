@@ -16,12 +16,25 @@ from greenference_protocol import (
     LeaseAssignment,
     MinerRegistration,
     NodeCapability,
+    SSHAccessRecord,
     UnifiedRuntimeRecord,
+    VolumeRecord,
     WorkloadKind,
     WorkloadSpec,
 )
 
 from greenference_node_agent.config import Settings
+from greenference_node_agent.domain.inference import (
+    ArtifactBundle,
+    InferenceRuntimeError,
+    LocalArtifactInferenceBackend,
+    ProcessInferenceBackend,
+    StagedArtifactStore,
+)
+from greenference_node_agent.domain.pod import PodError, ProcessPodBackend, StubPodBackend
+from greenference_node_agent.domain.ssh import SSHError, build_ssh_access, choose_free_port, generate_ssh_keypair
+from greenference_node_agent.domain.vm import FirecrackerVMBackend, StubVMBackend, VMError
+from greenference_node_agent.domain.volume import LocalVolumeManager, VolumeError
 from greenference_node_agent.infrastructure.repository import NodeAgentRepository
 
 logger = logging.getLogger(__name__)
@@ -45,6 +58,30 @@ class NodeAgentService:
             hotkey_name=settings.hotkey_name,
             auth_mode=settings.auth_mode,
         )
+
+        # Pod backend
+        if settings.pod_backend == "process":
+            self.pod_backend: ProcessPodBackend | StubPodBackend = ProcessPodBackend()
+        else:
+            self.pod_backend = StubPodBackend()
+        self.volume_manager = LocalVolumeManager(settings.volume_base_dir)
+
+        # Inference backend
+        fallback = LocalArtifactInferenceBackend()
+        if settings.inference_backend == "process":
+            self.inference_backend: ProcessInferenceBackend | LocalArtifactInferenceBackend = ProcessInferenceBackend(fallback_backend=fallback)
+        else:
+            self.inference_backend = fallback
+        self.artifact_store = StagedArtifactStore(settings.artifact_cache_dir)
+
+        # VM backend
+        if settings.vm_backend == "firecracker":
+            self.vm_backend: StubVMBackend | FirecrackerVMBackend = FirecrackerVMBackend()
+        else:
+            self.vm_backend = StubVMBackend()
+
+        # Track volume records for cleanup
+        self._volume_records: dict[str, VolumeRecord] = {}
 
     # --- Agent lifecycle ---
 
@@ -171,23 +208,74 @@ class NodeAgentService:
 
     def _start_pod_runtime(self, runtime: UnifiedRuntimeRecord, workload: WorkloadSpec) -> None:
         """Start a pod workload (Docker container with SSH)."""
-        logger.info("starting pod runtime for %s (template: %s)", runtime.deployment_id, workload.metadata.get("template"))
+        s = self.settings
+        template_name = workload.metadata.get("template")
+        logger.info("starting pod runtime for %s (template: %s)", runtime.deployment_id, template_name)
+
+        # Pick SSH port and generate keypair
+        try:
+            ssh_port = choose_free_port(s.ssh_port_range_start, s.ssh_port_range_end)
+            private_key, public_key = generate_ssh_keypair()
+        except SSHError:
+            logger.exception("SSH setup failed for %s", runtime.deployment_id)
+            self._fail_runtime(runtime, "SSH setup failed")
+            return
+
+        # Create persistent volume
+        gpu_fraction = workload.requirements.gpu_count if workload.requirements else 1.0
+        volume_size_gb = int(workload.metadata.get("volume_size_gb", 50))
+        try:
+            volume = self.volume_manager.create_volume(
+                deployment_id=runtime.deployment_id,
+                hotkey=runtime.hotkey,
+                node_id=runtime.node_id,
+                size_gb=volume_size_gb,
+            )
+            self._volume_records[runtime.deployment_id] = volume
+        except VolumeError:
+            logger.exception("volume creation failed for %s", runtime.deployment_id)
+            self._fail_runtime(runtime, "volume creation failed")
+            return
+
+        # Resolve image from template or workload
+        image = workload.image
+        if not image and template_name:
+            from greenference_node_agent.domain.templates import get_template
+            tpl = get_template(template_name)
+            if tpl:
+                image = tpl.image
+
         runtime = runtime.model_copy(update={
             "status": "starting",
             "current_stage": "start_pod",
-            "template": workload.metadata.get("template"),
-            "gpu_fraction": workload.requirements.gpu_count,
+            "template": template_name,
+            "gpu_fraction": gpu_fraction,
+            "ssh_host": s.ssh_host,
+            "ssh_port": ssh_port,
+            "ssh_username": "root",
+            "ssh_fingerprint": None,
+            "volume_path": volume.path,
+            "volume_size_gb": volume_size_gb,
+            "metadata": {
+                **runtime.metadata,
+                "image": image,
+                "ssh_public_keys": [public_key],
+                "ssh_private_key": private_key,
+            },
+            "updated_at": _utcnow(),
         })
         self.repository.upsert_runtime(runtime)
 
-        # TODO: Phase 2 full implementation — create volume, generate SSH keypair,
-        # pick port, start Docker container. For now, mark ready with stub.
+        # Start container
+        try:
+            runtime = self.pod_backend.start_pod(runtime, workload)
+        except PodError as exc:
+            logger.exception("pod start failed for %s", runtime.deployment_id)
+            self._fail_runtime(runtime, str(exc))
+            return
+
         runtime = runtime.model_copy(update={
-            "status": "ready",
-            "current_stage": "ready",
-            "endpoint": f"{self.settings.miner_api_base_url}/deployments/{runtime.deployment_id}",
-            "ssh_host": self.settings.ssh_host,
-            "updated_at": _utcnow(),
+            "endpoint": f"{s.miner_api_base_url}/deployments/{runtime.deployment_id}",
         })
         self.repository.upsert_runtime(runtime)
         self._report_deployment_ready(runtime)
@@ -210,6 +298,15 @@ class NodeAgentService:
         })
         self.repository.upsert_runtime(runtime)
         self._report_deployment_ready(runtime)
+
+    # --- Access helpers ---
+
+    def get_ssh_access(self, deployment_id: str, include_private_key: bool = False) -> SSHAccessRecord | None:
+        runtime = self.repository.get_runtime(deployment_id)
+        if runtime is None or runtime.workload_kind not in (WorkloadKind.POD, "pod"):
+            return None
+        private_key = runtime.metadata.get("ssh_private_key") if include_private_key else None
+        return build_ssh_access(runtime, include_private_key=include_private_key, private_key=private_key)
 
     # --- Runtime lifecycle helpers ---
 
