@@ -353,14 +353,18 @@ class NodeAgentService:
             "gpu_fraction": gpu_fraction,
             "ssh_host": s.ssh_host,
             "ssh_port": ssh_port,
-            "ssh_username": "linuxserver",
+            "ssh_username": "ubuntu",
             "ssh_fingerprint": None,
             "volume_path": volume.path,
             "volume_size_gb": volume_size_gb,
             "metadata": {
                 **runtime.metadata,
                 "image": image,
-                "ssh_public_keys": [public_key],
+                "ssh_public_keys": [
+                    public_key,
+                    # Include user-provided SSH keys from workload metadata
+                    *[k for k in (workload.metadata.get("ssh_public_keys") or []) if k.strip()],
+                ],
                 "ssh_private_key": private_key,
                 "gpu_devices": gpu_devices,
                 "gpu_count": gpu_count,

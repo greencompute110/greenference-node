@@ -8,7 +8,6 @@ import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from math import floor
-from pathlib import Path
 from typing import Any
 
 from greenference_protocol import UnifiedRuntimeRecord, WorkloadSpec
@@ -95,24 +94,19 @@ class ProcessPodBackend(PodBackend):
         for key, value in env_vars.items():
             cmd += ["-e", f"{key}={value}"]
 
-        # linuxserver/openssh-server config — use default "linuxserver" user
-        # (USER_NAME=root crashes init since root already exists in /etc/passwd)
-        cmd += ["-e", "PUID=1000"]
-        cmd += ["-e", "PGID=1000"]
+        # linuxserver/openssh-server config
+        # USER_NAME=root crashes (already in /etc/passwd), use "ubuntu" with uid 0 (root)
+        cmd += ["-e", "PUID=0"]
+        cmd += ["-e", "PGID=0"]
+        cmd += ["-e", "USER_NAME=ubuntu"]
         cmd += ["-e", "SUDO_ACCESS=true"]
         cmd += ["-e", "PASSWORD_ACCESS=false"]
 
-        # SSH authorized keys — write to a file and mount via PUBLIC_KEY_FILE
-        # (passing via env var can mangle whitespace depending on subprocess handling)
+        # SSH authorized keys — includes ephemeral + user-provided keys
         ssh_public_keys: list[str] = runtime.metadata.get("ssh_public_keys", [])
         if ssh_public_keys:
-            keys_str = "\n".join(ssh_public_keys) + "\n"
-            key_dir = Path(runtime.volume_path or "/tmp") / ".greenference-ssh"
-            key_dir.mkdir(parents=True, exist_ok=True)
-            key_file = key_dir / "authorized_keys"
-            key_file.write_text(keys_str, encoding="utf-8")
-            cmd += ["-v", f"{key_file}:/pubkey:ro"]
-            cmd += ["-e", "PUBLIC_KEY_FILE=/pubkey"]
+            keys_str = "\n".join(ssh_public_keys)
+            cmd += ["-e", f"PUBLIC_KEY={keys_str}"]
 
         cmd.append(image)
 
