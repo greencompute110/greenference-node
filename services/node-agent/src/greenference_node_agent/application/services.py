@@ -247,6 +247,7 @@ class NodeAgentService:
         payload = {
             "build_id": build_id,
             "image": image,
+            "docker_image": image,
             "runtime_manifest": runtime_manifest,
         }
 
