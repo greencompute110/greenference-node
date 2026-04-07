@@ -115,7 +115,7 @@ class ProcessPodBackend(PodBackend):
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=60.0,
+                timeout=600.0,
             )
             if result.returncode != 0:
                 raise PodError(
