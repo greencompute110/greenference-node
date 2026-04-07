@@ -539,7 +539,7 @@ class DockerInferenceBackend(InferenceBackend):
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=120.0,
+                timeout=600.0,
             )
             if result.returncode != 0:
                 raise InferenceRuntimeError(
