@@ -49,20 +49,26 @@ def _bootstrap() -> None:
     _worker_state["bootstrapped"] = True
 
 
+def _worker_tick() -> None:
+    """Synchronous worker tick — runs in a thread so it cannot block the event loop."""
+    if settings.bootstrap_miner and not _worker_state["bootstrapped"]:
+        logger.info("bootstrapping node agent...")
+        _bootstrap()
+        logger.info("bootstrap complete")
+    if settings.bootstrap_miner:
+        service.publish_heartbeat(Heartbeat(hotkey=settings.miner_hotkey, healthy=True))
+        capacity = service.build_capacity_update()
+        service.publish_capacity(capacity)
+        service.reconcile_once(settings.miner_hotkey)
+    _worker_state["last_iteration"] = datetime.now(UTC).isoformat()
+
+
 async def _worker_loop() -> None:
     _worker_state["running"] = True
+    loop = asyncio.get_running_loop()
     while True:
         try:
-            if settings.bootstrap_miner and not _worker_state["bootstrapped"]:
-                logger.info("bootstrapping node agent...")
-                _bootstrap()
-                logger.info("bootstrap complete")
-            if settings.bootstrap_miner:
-                service.publish_heartbeat(Heartbeat(hotkey=settings.miner_hotkey, healthy=True))
-                capacity = service.build_capacity_update()
-                service.publish_capacity(capacity)
-                service.reconcile_once(settings.miner_hotkey)
-            _worker_state["last_iteration"] = datetime.now(UTC).isoformat()
+            await loop.run_in_executor(None, _worker_tick)
         except Exception:
             logger.exception("worker loop error")
         await asyncio.sleep(settings.worker_poll_interval_seconds)
