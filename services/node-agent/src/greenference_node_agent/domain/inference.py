@@ -299,7 +299,7 @@ class ProcessInferenceBackend(InferenceBackend):
         payload_path.write_text(json.dumps(artifact.payload, sort_keys=True), encoding="utf-8")
 
         port = _choose_free_port()
-        runtime_url = f"http://127.0.0.1:{port}"
+        runtime_url = f"http://{_docker_host()}:{port}"
         command = [
             sys.executable,
             "-m",
@@ -468,7 +468,7 @@ class DockerInferenceBackend(InferenceBackend):
         self,
         *,
         backend_name: str = "docker-vllm-backend",
-        health_timeout_seconds: float = 300.0,
+        health_timeout_seconds: float = 600.0,
         default_image: str = "vllm/vllm-openai:v0.7.3",
         gpu_memory_utilization: float = 0.90,
     ) -> None:
@@ -555,7 +555,7 @@ class DockerInferenceBackend(InferenceBackend):
                 stage="start_inference_backend",
             ) from exc
 
-        runtime_url = f"http://127.0.0.1:{port}"
+        runtime_url = f"http://{_docker_host()}:{port}"
         runtime = runtime.model_copy(update={
             "container_id": container_id,
             "runtime_url": runtime_url,
@@ -575,7 +575,12 @@ class DockerInferenceBackend(InferenceBackend):
         })
 
         # vLLM takes time to load — wait for health
-        self._wait_for_health(runtime)
+        try:
+            self._wait_for_health(runtime)
+        except InferenceRuntimeError:
+            # Clean up the container on health check failure
+            self.stop_runtime(runtime)
+            raise
         return runtime
 
     def stop_runtime(self, runtime: UnifiedRuntimeRecord) -> UnifiedRuntimeRecord:
@@ -864,6 +869,31 @@ class StagedArtifactStore:
             "evicted_artifact_count": len(evicted_artifacts),
             "evicted_runtime_dir_count": len(evicted_runtime_dirs),
         }
+
+
+def _docker_host() -> str:
+    """Return the host IP to reach sibling Docker containers.
+
+    When the node-agent itself runs inside Docker (via docker-compose with the
+    Docker socket mounted), ports mapped with ``-p HOST_PORT:CONTAINER_PORT``
+    are reachable on the **host** network, not on 127.0.0.1 inside the
+    node-agent container.  We resolve this by reading the default gateway from
+    /proc/net/route (the Docker bridge gateway) which points back to the host.
+    """
+    if not Path("/.dockerenv").exists():
+        return "127.0.0.1"
+    try:
+        with open("/proc/net/route") as f:
+            for line in f:
+                fields = line.strip().split()
+                if fields[1] == "00000000":  # default route
+                    # Gateway is in hex, little-endian
+                    gw_hex = fields[2]
+                    gw_ip = ".".join(str(int(gw_hex[i : i + 2], 16)) for i in range(0, 8, 2))
+                    return gw_ip
+    except (OSError, IndexError, ValueError):
+        pass
+    return "172.17.0.1"  # common Docker bridge gateway fallback
 
 
 def _choose_free_port() -> int:
