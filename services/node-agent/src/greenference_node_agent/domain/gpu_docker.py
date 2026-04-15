@@ -6,8 +6,12 @@ Docker + NVIDIA has three eras of GPU passthrough:
   3. NVIDIA Container Toolkit (CDI): --gpus flag using CDI device specs
 
 Newer Docker versions (25+) default to CDI for --gpus, which fails if
-`nvidia-ctk cdi generate` was never run. This module probes once at import
-time and caches the working method.
+`nvidia-ctk cdi generate` was never run. This module probes once at first
+call and caches the working method.
+
+When running inside Docker (typical for node-agent), the probe talks to the
+host daemon via the mounted Docker socket, so the test containers run on the
+host — exactly the same path real workloads take.
 """
 
 from __future__ import annotations
@@ -20,57 +24,91 @@ logger = logging.getLogger(__name__)
 # Cached result: "gpus", "runtime", or "env_only"
 _gpu_mode: str | None = None
 
+_TOOLKIT_IMAGE = "nvidia/cuda:12.4.1-base-ubuntu22.04"
+
+
+def _run(cmd: list[str], timeout: float = 120) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)  # noqa: S603
+
+
+def _try_gpus() -> bool:
+    """Test --gpus all."""
+    try:
+        r = _run(["docker", "run", "--rm", "--gpus", "all", _TOOLKIT_IMAGE, "nvidia-smi", "-L"])
+        if r.returncode == 0:
+            return True
+        logger.debug("--gpus probe failed: %s", r.stderr.strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        logger.debug("--gpus probe exception: %s", e)
+    return False
+
+
+def _try_runtime() -> bool:
+    """Test --runtime=nvidia."""
+    try:
+        r = _run([
+            "docker", "run", "--rm", "--runtime=nvidia",
+            "-e", "NVIDIA_VISIBLE_DEVICES=all",
+            _TOOLKIT_IMAGE, "nvidia-smi", "-L",
+        ])
+        if r.returncode == 0:
+            return True
+        logger.debug("--runtime=nvidia probe failed: %s", r.stderr.strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        logger.debug("--runtime=nvidia probe exception: %s", e)
+    return False
+
+
+def _generate_cdi_specs() -> bool:
+    """Generate CDI specs on the host by running nvidia-ctk in a privileged container.
+
+    The nvidia/cuda image doesn't ship nvidia-ctk, but the NVIDIA Container
+    Toolkit image does.  We run it with host PID namespace and the host /etc/cdi
+    bind-mounted so the generated spec lands on the host.
+    """
+    logger.info("Attempting to generate CDI specs on host via container...")
+    try:
+        r = _run([
+            "docker", "run", "--rm", "--privileged",
+            "--pid=host",
+            "-v", "/etc/cdi:/etc/cdi",
+            "-v", "/var/run/docker.sock:/var/run/docker.sock",
+            "nvcr.io/nvidia/k8s/container-toolkit:v1.17.5-ubuntu20.04",
+            "nvidia-ctk", "cdi", "generate", "--output=/etc/cdi/nvidia.yaml",
+        ], timeout=180)
+        if r.returncode == 0:
+            logger.info("CDI specs generated successfully")
+            return True
+        logger.warning("CDI generate failed (rc=%d): %s", r.returncode, r.stderr.strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        logger.warning("CDI generate exception: %s", e)
+    return False
+
 
 def _probe_gpu_mode() -> str:
-    """Try each GPU method with a lightweight container and return the first that works."""
+    """Try each GPU method and return the first that works."""
 
-    test_image = "nvidia/cuda:12.4.1-base-ubuntu22.04"
+    # Method 1: --gpus (works if CDI is configured or on older Docker < 25)
+    if _try_gpus():
+        logger.info("GPU passthrough: --gpus")
+        return "gpus"
 
-    # Method 1: --gpus all (works if CDI is set up or on older Docker)
-    try:
-        r = subprocess.run(
-            ["docker", "run", "--rm", "--gpus", "all", test_image, "nvidia-smi", "-L"],
-            capture_output=True, text=True, timeout=120,
-        )
-        if r.returncode == 0:
-            logger.info("GPU mode: --gpus (CDI or legacy nvidia-container-cli)")
-            return "gpus"
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+    # Method 2: --runtime=nvidia (nvidia-docker2 / daemon.json configured)
+    if _try_runtime():
+        logger.info("GPU passthrough: --runtime=nvidia")
+        return "runtime"
 
-    # Method 2: --runtime=nvidia (nvidia-docker2 / manually registered runtime)
-    try:
-        r = subprocess.run(
-            ["docker", "run", "--rm", "--runtime=nvidia",
-             "-e", "NVIDIA_VISIBLE_DEVICES=all", test_image, "nvidia-smi", "-L"],
-            capture_output=True, text=True, timeout=120,
-        )
-        if r.returncode == 0:
-            logger.info("GPU mode: --runtime=nvidia")
-            return "runtime"
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+    # Method 3: generate CDI specs on host, then retry --gpus
+    if _generate_cdi_specs() and _try_gpus():
+        logger.info("GPU passthrough: --gpus (after CDI generate)")
+        return "gpus"
 
-    # Method 3: try generating CDI specs then retry --gpus
-    try:
-        gen = subprocess.run(
-            ["nvidia-ctk", "cdi", "generate", "--output=/etc/cdi/nvidia.yaml"],
-            capture_output=True, text=True, timeout=30,
-        )
-        if gen.returncode == 0:
-            logger.info("Generated CDI specs, retrying --gpus")
-            r = subprocess.run(
-                ["docker", "run", "--rm", "--gpus", "all", test_image, "nvidia-smi", "-L"],
-                capture_output=True, text=True, timeout=120,
-            )
-            if r.returncode == 0:
-                logger.info("GPU mode: --gpus (after CDI generate)")
-                return "gpus"
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-
-    # Fallback: just NVIDIA_VISIBLE_DEVICES env (requires default runtime = nvidia)
-    logger.warning("No GPU passthrough method verified — falling back to NVIDIA_VISIBLE_DEVICES env only")
+    # Last resort
+    logger.warning(
+        "No GPU passthrough method verified. "
+        "Run 'sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml' "
+        "on the host, then restart."
+    )
     return "env_only"
 
 
@@ -89,7 +127,7 @@ def gpu_docker_flags(device_ids: list[int] | None) -> list[str]:
         device_ids: specific GPU device IDs, or None for all GPUs.
 
     Returns:
-        List of CLI args to insert into `docker run ...` command.
+        List of CLI args to insert into ``docker run`` command.
     """
     mode = get_gpu_mode()
     device_str = ",".join(str(d) for d in device_ids) if device_ids else "all"
@@ -101,5 +139,4 @@ def gpu_docker_flags(device_ids: list[int] | None) -> list[str]:
     elif mode == "runtime":
         return ["--runtime=nvidia", "-e", f"NVIDIA_VISIBLE_DEVICES={device_str}"]
     else:
-        # env_only — hope the default runtime handles it
         return ["-e", f"NVIDIA_VISIBLE_DEVICES={device_str}"]
