@@ -28,13 +28,19 @@ BUILTIN_TEMPLATES: dict[str, TemplateSpec] = {
         description="VS Code Server in the browser",
     ),
     "pytorch": TemplateSpec(
+        image="pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime",
+        port=8888,
+        gpu_fraction=1.0,
+        description="PyTorch 2.7 with CUDA 12.8",
+    ),
+    "pytorch-legacy": TemplateSpec(
         image="pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime",
         port=8888,
         gpu_fraction=1.0,
-        description="PyTorch with CUDA 12.1",
+        description="PyTorch 2.2 with CUDA 12.1 (legacy, for older drivers)",
     ),
     "vllm": TemplateSpec(
-        image="vllm/vllm-openai:v0.7.3",
+        image="vllm/vllm-openai:v0.8.5",
         port=8000,
         gpu_fraction=1.0,
         description="vLLM OpenAI-compatible inference server",
@@ -55,14 +61,14 @@ BUILTIN_TEMPLATES: dict[str, TemplateSpec] = {
         image="greenference/gpu-pod:latest",
         port=22,
         gpu_fraction=1.0,
-        description="GPU pod with SSH access (CUDA 12.4)",
+        description="GPU pod with SSH access",
     ),
     "pytorch-jupyter": TemplateSpec(
-        image="pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime",
+        image="pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime",
         port=8888,
         gpu_fraction=1.0,
         env_vars={"JUPYTER_ENABLE_LAB": "yes"},
-        description="PyTorch + JupyterLab",
+        description="PyTorch 2.7 + CUDA 12.8 + JupyterLab",
     ),
 }
 
