@@ -465,20 +465,33 @@ class ProcessInferenceBackend(InferenceBackend):
 class DockerInferenceBackend(InferenceBackend):
     """Launches inference as a Docker container running vLLM or diffusion server."""
 
-    DIFFUSION_DEFAULT_IMAGE = "ghcr.io/greenference/diffusion:latest"
+    DIFFUSION_DEFAULT_IMAGE = os.environ.get(
+        "GREENFERENCE_DIFFUSION_IMAGE",
+        "ghcr.io/greenference/diffusion:latest",
+    )
 
     def __init__(
         self,
         *,
         backend_name: str = "docker-vllm-backend",
         health_timeout_seconds: float = 600.0,
-        default_image: str = "vllm/vllm-openai:v0.7.3",
+        default_image: str | None = None,
         gpu_memory_utilization: float = 0.90,
     ) -> None:
         self.backend_name = backend_name
         self.health_timeout_seconds = health_timeout_seconds
-        self.default_image = default_image
+        self.default_image = default_image or os.environ.get(
+            "GREENFERENCE_VLLM_IMAGE",
+            "vllm/vllm-openai:v0.7.3",
+        )
         self.gpu_memory_utilization = gpu_memory_utilization
+
+    @staticmethod
+    def _looks_like_vision_model(model_id: str) -> bool:
+        """Heuristic for vLLM vision models. Used to set safer defaults."""
+        m = model_id.lower()
+        markers = ("-vl-", "-vl/", "vl-instruct", "vision-instruct", "-vision-", "vision-chat", "phi-3-vision", "phi-3.5-vision", "llava", "idefics", "cogvlm")
+        return any(k in m for k in markers)
 
     def _is_diffusion(self, artifact: ArtifactBundle) -> bool:
         runtime_manifest = artifact.payload.get("runtime_manifest", {})
@@ -534,6 +547,9 @@ class DockerInferenceBackend(InferenceBackend):
                 "--host", "0.0.0.0",
                 "--port", "8000",
                 "--gpu-memory-utilization", str(self.gpu_memory_utilization),
+                # Required by many modern models (Qwen, DeepSeek, InternLM, most vision models)
+                # that ship custom modeling code. Harmless for standard Llama/Mistral.
+                "--trust-remote-code",
             ]
 
             # Optional: tensor parallel for multi-GPU
@@ -541,8 +557,12 @@ class DockerInferenceBackend(InferenceBackend):
             if tp_size and int(tp_size) > 1:
                 cmd += ["--tensor-parallel-size", str(tp_size)]
 
-            # Optional: max model length
+            # Max model length — caller can override via artifact payload; otherwise
+            # cap vision models at a conservative length to avoid OOM during KV-cache
+            # allocation (many VL models advertise 128k+ context by default).
             max_model_len = artifact.payload.get("max_model_len")
+            if not max_model_len and self._looks_like_vision_model(model_id):
+                max_model_len = 8192
             if max_model_len:
                 cmd += ["--max-model-len", str(max_model_len)]
 
