@@ -99,8 +99,38 @@ class NodeAgentService:
         # GPU device allocator
         self.gpu_allocator = GpuAllocator(settings.gpu_count)
 
+        # Rebuild allocator state from persisted runtimes — prevents double-
+        # allocation across node-agent restarts. Running containers from
+        # before the restart still hold their GPUs via --gpus; the allocator
+        # must know about them so it doesn't hand the same cards to a new
+        # workload.
+        self._rehydrate_gpu_allocator()
+
         # Track volume records for cleanup
         self._volume_records: dict[str, VolumeRecord] = {}
+
+    def _rehydrate_gpu_allocator(self) -> None:
+        active_states = {"accepted", "preparing", "starting", "ready"}
+        for rt in self.repository.runtimes.values():
+            if rt.status not in active_states:
+                continue
+            devices = rt.metadata.get("gpu_devices") or []
+            if not devices:
+                continue
+            try:
+                # Force allocator to treat these devices as taken by this
+                # deployment. We bypass the normal allocate() path because
+                # we already know which specific devices were assigned.
+                self.gpu_allocator._allocations[rt.deployment_id] = {int(d) for d in devices}
+                logger.info(
+                    "rehydrated GPU allocation: %s → %s",
+                    rt.deployment_id, sorted(devices),
+                )
+            except (TypeError, ValueError):
+                logger.warning(
+                    "could not rehydrate GPUs for %s (bad metadata: %r)",
+                    rt.deployment_id, devices,
+                )
 
     # --- Agent lifecycle ---
 
