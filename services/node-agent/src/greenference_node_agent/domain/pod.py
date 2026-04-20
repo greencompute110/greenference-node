@@ -83,6 +83,17 @@ class ProcessPodBackend(PodBackend):
         if runtime.ssh_port:
             cmd += ["-p", f"0.0.0.0:{runtime.ssh_port}:{container_ssh_port}"]
 
+        # Extra user-exposed ports: {container_port: host_port} pre-allocated
+        # by services.py from GREENFERENCE_USER_PORT_RANGE_* (max 10).
+        port_allocations: dict[int, int] = runtime.metadata.get("port_allocations") or {}
+        for container_port_str, host_port in port_allocations.items():
+            try:
+                cp = int(container_port_str)
+                hp = int(host_port)
+            except (TypeError, ValueError):
+                continue
+            cmd += ["-p", f"0.0.0.0:{hp}:{cp}"]
+
         # Volume mount
         if runtime.volume_path:
             cmd += ["-v", f"{runtime.volume_path}:/workspace"]
@@ -142,7 +153,9 @@ class ProcessPodBackend(PodBackend):
                 stage="start_pod",
             ) from exc
 
-        # Read back the actual host port Docker assigned
+        # Read back the actual host port Docker assigned (sanity check —
+        # should match what we bound, but Docker may pick differently under
+        # race conditions).
         actual_ssh_port = runtime.ssh_port
         if runtime.ssh_port:
             try:
@@ -161,10 +174,37 @@ class ProcessPodBackend(PodBackend):
             except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
                 pass
 
+        # Verify each user-exposed port matches the allocation. If Docker
+        # reports a different host port than what we requested, trust Docker.
+        verified_port_mappings: dict[int, int] = {}
+        for container_port_str, host_port in port_allocations.items():
+            try:
+                cp = int(container_port_str)
+            except (TypeError, ValueError):
+                continue
+            actual_host_port = int(host_port) if host_port else 0
+            try:
+                pr = subprocess.run(  # noqa: S603
+                    ["docker", "port", container_id, str(cp)],  # noqa: S607
+                    capture_output=True,
+                    text=True,
+                    timeout=5.0,
+                )
+                if pr.returncode == 0 and pr.stdout.strip():
+                    for line in pr.stdout.strip().splitlines():
+                        if ":" in line:
+                            actual_host_port = int(line.rsplit(":", 1)[-1])
+                            break
+            except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+                pass
+            if actual_host_port:
+                verified_port_mappings[cp] = actual_host_port
+
         return runtime.model_copy(
             update={
                 "container_id": container_id,
                 "ssh_port": actual_ssh_port,
+                "port_mappings": verified_port_mappings,
                 "status": "ready",
                 "current_stage": "ready",
                 "metadata": {

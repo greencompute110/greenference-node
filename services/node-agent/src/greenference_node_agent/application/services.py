@@ -316,6 +316,34 @@ class NodeAgentService:
             self._fail_runtime(runtime, "SSH setup failed")
             return
 
+        # Allocate additional user-exposed TCP ports. User requests a list of
+        # container ports; we pick free host ports from the user range.
+        requested_ports_raw = workload.metadata.get("requested_ports") or []
+        # Normalize + dedupe + cap at 10
+        seen: set[int] = set()
+        requested_ports: list[int] = []
+        for p in requested_ports_raw:
+            try:
+                pi = int(p)
+            except (TypeError, ValueError):
+                continue
+            if 1 <= pi <= 65535 and pi != 22 and pi not in seen:
+                seen.add(pi)
+                requested_ports.append(pi)
+            if len(requested_ports) >= 10:
+                break
+        port_allocations: dict[int, int] = {}
+        for container_port in requested_ports:
+            try:
+                host_port = choose_free_port(s.user_port_range_start, s.user_port_range_end)
+                port_allocations[container_port] = host_port
+            except SSHError:
+                logger.warning(
+                    "exhausted user port range for %s — allocated %d/%d requested",
+                    runtime.deployment_id, len(port_allocations), len(requested_ports),
+                )
+                break
+
         # Allocate specific GPU devices
         gpu_count = workload.requirements.gpu_count if workload.requirements else 1
         try:
@@ -371,6 +399,7 @@ class NodeAgentService:
                 "ssh_private_key": private_key,
                 "gpu_devices": gpu_devices,
                 "gpu_count": gpu_count,
+                "port_allocations": port_allocations,
             },
             "updated_at": _utcnow(),
         })

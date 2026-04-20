@@ -66,6 +66,12 @@ class Settings(BaseModel):
     ssh_port_range_start: int = Field(default=30000, ge=1024)
     ssh_port_range_end: int = Field(default=31000, ge=1025)
 
+    # Extra TCP ports the user can expose from their pod (apps, databases, APIs).
+    # Host-side bindings drawn from this range. Keep separate from SSH range.
+    # Hard cap of 10 ports per pod is enforced in pod.py.
+    user_port_range_start: int = Field(default=31001, ge=1024)
+    user_port_range_end: int = Field(default=32000, ge=1025)
+
     # Auth mode: "hotkey" (ed25519, production) or "hmac" (shared secret, dev)
     auth_mode: str = "hmac"
     # Bittensor wallet names for ed25519 signing (reads from ~/.bittensor/wallets/)
@@ -111,6 +117,8 @@ def load_settings() -> Settings:
         ssh_host=os.getenv("GREENFERENCE_SSH_HOST", "127.0.0.1"),
         ssh_port_range_start=int(os.getenv("GREENFERENCE_SSH_PORT_RANGE_START", "30000")),
         ssh_port_range_end=int(os.getenv("GREENFERENCE_SSH_PORT_RANGE_END", "31000")),
+        user_port_range_start=int(os.getenv("GREENFERENCE_USER_PORT_RANGE_START", "31001")),
+        user_port_range_end=int(os.getenv("GREENFERENCE_USER_PORT_RANGE_END", "32000")),
         auth_mode=os.getenv("GREENFERENCE_AUTH_MODE", "hmac"),
         coldkey_name=os.getenv("GREENFERENCE_COLDKEY_NAME") or None,
         hotkey_name=os.getenv("GREENFERENCE_HOTKEY_NAME", "default"),
