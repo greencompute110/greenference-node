@@ -741,14 +741,23 @@ class DockerInferenceBackend(InferenceBackend):
                         timeout=5.0,
                     )
                     if result.returncode == 0 and result.stdout.strip() == "exited":
+                        # Grab a generous window so we catch both the top of
+                        # the traceback (the actual exception type + message)
+                        # and the final stack frames. vLLM prints lots of
+                        # warnings before crashing, and Python tracebacks can
+                        # be 40+ lines each.
                         logs = subprocess.run(  # noqa: S603
-                            ["docker", "logs", "--tail", "20", runtime.container_id],  # noqa: S607
+                            ["docker", "logs", "--tail", "200", runtime.container_id],  # noqa: S607
                             capture_output=True,
                             text=True,
-                            timeout=5.0,
+                            timeout=10.0,
                         )
+                        # Merge stderr + stdout — model wrappers vary on which
+                        # stream they print the error to.
+                        combined = (logs.stdout or "") + (logs.stderr or "")
+                        # Trim any leading whitespace but keep the full tail.
                         raise InferenceRuntimeError(
-                            f"container exited prematurely: {logs.stderr or logs.stdout}",
+                            f"container exited prematurely:\n{combined.strip() or '<no output>'}",
                             failure_class="runtime_start_failure",
                             stage="health_check",
                         )
