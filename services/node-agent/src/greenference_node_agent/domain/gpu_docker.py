@@ -129,21 +129,25 @@ def gpu_docker_flags(device_ids: list[int] | None) -> list[str]:
     Returns:
         List of CLI args to insert into ``docker run`` command.
 
-    Implementation note — multi-GPU pitfall:
-        `--gpus device=0,1` breaks on many Docker versions because the CLI
-        parser splits the value on commas: `device=0` becomes `DeviceIDs=["0"]`
-        AND `1` becomes `Count=1`, and Docker then rejects the combination
-        with "cannot set both Count and DeviceIDs on device request".
-        The cross-version-safe pattern is to use `--gpus all` (activates the
-        NVIDIA runtime hook) plus `NVIDIA_VISIBLE_DEVICES=0,1` as an env var
-        for the actual device restriction.
+    Implementation notes — multi-GPU pitfalls:
+      1. `--gpus device=0,1` fails on Docker 20+ because the CLI parser splits
+         the value on commas: `device=0` becomes DeviceIDs=["0"] AND `1`
+         becomes Count=1, and Docker rejects the combination with
+         "cannot set both Count and DeviceIDs on device request".
+         Fix: wrap the value in literal double-quotes so the parser treats it
+         as one atom — `--gpus '"device=0,1"'`. Documented in Docker's own
+         docs: https://docs.docker.com/engine/containers/resource_constraints/
+      2. `--gpus all` + `NVIDIA_VISIBLE_DEVICES=0,1` does NOT isolate — the
+         `--gpus all` flag overrides the env var and exposes every GPU.
     """
     mode = get_gpu_mode()
     device_str = ",".join(str(d) for d in device_ids) if device_ids else "all"
 
     if mode == "gpus":
         if device_ids:
-            return ["--gpus", "all", "-e", f"NVIDIA_VISIBLE_DEVICES={device_str}"]
+            # Literal double-quotes are REQUIRED around the value to defeat
+            # Docker CLI's comma-split of the --gpus argument.
+            return ["--gpus", f'"device={device_str}"']
         return ["--gpus", "all"]
     elif mode == "runtime":
         return ["--runtime=nvidia", "-e", f"NVIDIA_VISIBLE_DEVICES={device_str}"]
