@@ -89,6 +89,13 @@ class Settings(BaseModel):
 
 
 def load_settings() -> Settings:
+    miner_hotkey = os.getenv("GREENFERENCE_MINER_HOTKEY", "node-local")
+    # node_id is the PRIMARY KEY of the control-plane's node_inventory table,
+    # so two miners sharing the same `node_id` will silently overwrite each
+    # other's capacity updates. If the operator hasn't set
+    # GREENFERENCE_MINER_NODE_ID, derive a unique default from the hotkey
+    # so fresh installs can't collide out-of-the-box.
+    default_node_id = f"node-{miner_hotkey[:12]}" if miner_hotkey else "node-local"
     return Settings(
         enable_background_workers=_env_bool("GREENFERENCE_ENABLE_BACKGROUND_WORKERS", False),
         worker_poll_interval_seconds=float(os.getenv("GREENFERENCE_WORKER_POLL_INTERVAL_SECONDS", "1.0")),
@@ -97,12 +104,12 @@ def load_settings() -> Settings:
         artifact_cache_dir=os.getenv("GREENFERENCE_ARTIFACT_CACHE_DIR", "/tmp/greenference-node-artifacts"),
         volume_base_dir=os.getenv("GREENFERENCE_VOLUME_BASE_DIR", "/tmp/greenference-node-volumes"),
         control_plane_url=os.getenv("GREENFERENCE_CONTROL_PLANE_URL", "http://127.0.0.1:8001"),
-        miner_hotkey=os.getenv("GREENFERENCE_MINER_HOTKEY", "node-local"),
+        miner_hotkey=miner_hotkey,
         miner_payout_address=os.getenv("GREENFERENCE_MINER_PAYOUT_ADDRESS", "5FnodeLocal"),
         miner_auth_secret=os.getenv("GREENFERENCE_MINER_AUTH_SECRET", "greenference-node-local-secret"),
         miner_api_base_url=os.getenv("GREENFERENCE_MINER_API_BASE_URL", "http://127.0.0.1:8007"),
         miner_validator_url=os.getenv("GREENFERENCE_MINER_VALIDATOR_URL", "http://127.0.0.1:8002"),
-        node_id=os.getenv("GREENFERENCE_MINER_NODE_ID", "node-local"),
+        node_id=os.getenv("GREENFERENCE_MINER_NODE_ID", default_node_id),
         gpu_model=os.getenv("GREENFERENCE_GPU_MODEL", "a100"),
         gpu_count=int(os.getenv("GREENFERENCE_GPU_COUNT", "1")),
         available_gpus=int(os.getenv("GREENFERENCE_GPU_COUNT", "1")),
