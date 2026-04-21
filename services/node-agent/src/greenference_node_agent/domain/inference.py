@@ -506,6 +506,24 @@ class DockerInferenceBackend(InferenceBackend):
         port = _choose_free_port()
         container_name = f"greenference-inf-{runtime.deployment_id[:12]}"
         is_diffusion = self._is_diffusion(artifact)
+
+        # Clean up any stale container from a previous run with the same name.
+        # This happens when a prior start_runtime attempt partially succeeded
+        # (container created, then terminated or orphaned), leaving Docker
+        # with a name collision that blocks the retry. `docker rm -f` is
+        # idempotent: no-op if the name isn't present.
+        try:
+            subprocess.run(  # noqa: S603, S607
+                ["docker", "rm", "-f", container_name],
+                capture_output=True,
+                text=True,
+                timeout=30.0,
+                check=False,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            # Best-effort — if docker is missing or the rm hangs, let the
+            # subsequent `docker run` be the authoritative failure.
+            pass
         image = artifact.payload.get("docker_image") or (self.DIFFUSION_DEFAULT_IMAGE if is_diffusion else self.default_image)
 
         cmd: list[str] = [
