@@ -1,5 +1,5 @@
 #!/bin/bash
-# Greenference pod entrypoint — injected into any container image.
+# Green Compute pod entrypoint — injected into any container image.
 # Installs SSH server, writes authorized keys, starts sshd, then
 # runs the original CMD so the container works as expected.
 # Modeled after Vast.ai / RunPod pod bootstrap.
@@ -19,7 +19,7 @@ install_ssh() {
     elif command -v dnf >/dev/null 2>&1; then
         dnf install -y openssh-server >/dev/null 2>&1
     else
-        echo "[greenference] WARN: cannot install openssh-server — unknown package manager" >&2
+        echo "[greencompute] WARN: cannot install openssh-server — unknown package manager" >&2
         return 1
     fi
 }
@@ -50,19 +50,19 @@ configure_ssh() {
     fi
 }
 
-echo "[greenference] setting up SSH..."
+echo "[greencompute] setting up SSH..."
 if install_ssh; then
     configure_ssh
-    /usr/sbin/sshd 2>/dev/null || echo "[greenference] WARN: sshd failed to start" >&2
-    echo "[greenference] SSH ready on port 22"
+    /usr/sbin/sshd 2>/dev/null || echo "[greencompute] WARN: sshd failed to start" >&2
+    echo "[greencompute] SSH ready on port 22"
 else
-    echo "[greenference] SSH setup failed — container will run without SSH" >&2
+    echo "[greencompute] SSH setup failed — container will run without SSH" >&2
 fi
 
 # --- Run original command or sleep forever ---
 if [ $# -gt 0 ]; then
     exec "$@"
 else
-    echo "[greenference] no CMD specified — keeping container alive"
+    echo "[greencompute] no CMD specified — keeping container alive"
     exec sleep infinity
 fi

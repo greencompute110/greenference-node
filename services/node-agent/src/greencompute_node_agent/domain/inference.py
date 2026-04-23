@@ -467,7 +467,7 @@ class DockerInferenceBackend(InferenceBackend):
 
     DIFFUSION_DEFAULT_IMAGE = os.environ.get(
         "GREENCOMPUTE_DIFFUSION_IMAGE",
-        "ghcr.io/greenference/diffusion:latest",
+        "ghcr.io/greencompute110/diffusion:latest",
     )
 
     def __init__(

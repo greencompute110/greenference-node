@@ -44,8 +44,8 @@ nvidia-smi | grep "Driver Version"
 
 ```bash
 mkdir greencompute-ai && cd greencompute-ai
-git clone https://github.com/greenference/greencompute.git        # protocol
-git clone https://github.com/greenference/greencompute-node.git   # this repo
+git clone https://github.com/greencompute110/greencompute.git        # protocol
+git clone https://github.com/greencompute110/greencompute-node.git   # this repo
 cd greencompute-node
 ```
 
@@ -94,7 +94,7 @@ curl http://localhost:8007/readyz
 |---|---|---|
 | `vllm` | `vllm/vllm-openai:v0.19.1-cu130-ubuntu2404` | Qwen 2.5, Llama 3, Mistral, Phi |
 | `vllm-vision` | `vllm/vllm-openai:v0.19.1-cu130-ubuntu2404` | Qwen2-VL, LLaVA, Phi-3.5-vision |
-| `diffusion` | `greenference/diffusion-server:latest` | SDXL, FLUX, SD3 |
+| `diffusion` | `greencompute110/diffusion-server:latest` | SDXL, FLUX, SD3 |
 
 All inference images are CUDA 13 → **NVIDIA driver 545+ required**.
 
