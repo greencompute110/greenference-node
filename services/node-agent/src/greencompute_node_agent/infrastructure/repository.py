@@ -7,7 +7,7 @@ import logging
 import os
 from typing import Any
 
-from greenference_protocol import (
+from greencompute_protocol import (
     CollateralRecord,
     ComputePlacementRecord,
     UnifiedRuntimeRecord,
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class NodeAgentRepository:
-    def __init__(self, state_path: str = "/tmp/greenference-node-runtime-state.json") -> None:
+    def __init__(self, state_path: str = "/tmp/greencompute-node-runtime-state.json") -> None:
         self.state_path = state_path
         self.runtimes: dict[str, UnifiedRuntimeRecord] = {}
         self.placements: dict[str, ComputePlacementRecord] = {}

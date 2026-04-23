@@ -18,9 +18,9 @@ from urllib.error import HTTPError, URLError
 
 from pydantic import BaseModel, Field
 
-from greenference_protocol import ChatCompletionRequest, ChatCompletionResponse, UnifiedRuntimeRecord
-from greenference_node_agent.domain.model_backend import ModelBackendError, create_text_generation_backend
-from greenference_node_agent.domain.gpu_docker import gpu_docker_flags
+from greencompute_protocol import ChatCompletionRequest, ChatCompletionResponse, UnifiedRuntimeRecord
+from greencompute_node_agent.domain.model_backend import ModelBackendError, create_text_generation_backend
+from greencompute_node_agent.domain.gpu_docker import gpu_docker_flags
 
 logger = logging.getLogger(__name__)
 
@@ -304,7 +304,7 @@ class ProcessInferenceBackend(InferenceBackend):
         command = [
             sys.executable,
             "-m",
-            "greenference_node_agent.runtime_server",
+            "greencompute_node_agent.runtime_server",
             "--port",
             str(port),
             "--deployment-id",
@@ -506,7 +506,7 @@ class DockerInferenceBackend(InferenceBackend):
     ) -> UnifiedRuntimeRecord:
         model_id = runtime.model_identifier or artifact.image
         port = _choose_free_port()
-        container_name = f"greenference-inf-{runtime.deployment_id[:12]}"
+        container_name = f"greencompute-inf-{runtime.deployment_id[:12]}"
         is_diffusion = self._is_diffusion(artifact)
 
         # Clean up any stale container from a previous run with the same name.
@@ -708,7 +708,7 @@ class DockerInferenceBackend(InferenceBackend):
             usage_raw = data.get("usage") or {}
             usage = None
             if isinstance(usage_raw, dict):
-                from greenference_protocol import ChatCompletionUsage
+                from greencompute_protocol import ChatCompletionUsage
                 usage = ChatCompletionUsage(
                     prompt_tokens=int(usage_raw.get("prompt_tokens", 0) or 0),
                     completion_tokens=int(usage_raw.get("completion_tokens", 0) or 0),

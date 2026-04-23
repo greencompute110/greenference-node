@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from greenference_protocol import SSHAccessRecord, UnifiedRuntimeRecord
+from greencompute_protocol import SSHAccessRecord, UnifiedRuntimeRecord
 
 
 class SSHError(RuntimeError):
@@ -27,7 +27,7 @@ def generate_ssh_keypair() -> tuple[str, str]:
                     "-t", "ed25519",
                     "-f", str(key_path),
                     "-N", "",
-                    "-C", "greenference-ephemeral",
+                    "-C", "greencompute-ephemeral",
                 ],
                 capture_output=True,
                 text=True,

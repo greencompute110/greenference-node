@@ -29,7 +29,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("greenference-diffusion")
+logger = logging.getLogger("greencompute-diffusion")
 
 app = FastAPI()
 

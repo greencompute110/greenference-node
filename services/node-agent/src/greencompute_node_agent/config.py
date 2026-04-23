@@ -2,9 +2,35 @@
 
 from __future__ import annotations
 
-import os
+import os as _os
 
 from pydantic import BaseModel, Field
+
+
+def _gc_getenv(name: str, default: str | None = None) -> str | None:
+    """Rebrand-aware env read. `GREENFERENCE_*` env vars are migrated to
+    `GREENCOMPUTE_*`; during the transition we read both (new prefix first).
+    Miners can set either and it Just Works."""
+    if name.startswith("GREENFERENCE_"):
+        new_key = "GREENCOMPUTE_" + name[len("GREENFERENCE_"):]
+        v = _os.environ.get(new_key)
+        if v is not None:
+            return v
+    v = _os.environ.get(name)
+    return v if v is not None else default
+
+
+# Lightweight shim: expose `os.getenv` that routes through _gc_getenv, so
+# every existing `os.getenv("GREENFERENCE_X", default)` call in this module
+# keeps working without hand-editing each one. This shim is module-scoped
+# only — it does not alter the global `os` module.
+class _Os:  # noqa: N801 — intentional module-local name
+    getenv = staticmethod(_gc_getenv)
+    environ = _os.environ
+    path = _os.path
+
+
+os = _Os()  # noqa: F841 — intentional shadow of `os` within this file
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -15,15 +41,15 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 
 class Settings(BaseModel):
-    service_name: str = "greenference-node-agent"
+    service_name: str = "greencompute-node-agent"
     enable_background_workers: bool = False
     worker_poll_interval_seconds: float = Field(default=1.0, ge=0.1)
     bootstrap_miner: bool = False
 
     # Persistence
-    runtime_state_path: str = "/tmp/greenference-node-runtime-state.json"
-    artifact_cache_dir: str = "/tmp/greenference-node-artifacts"
-    volume_base_dir: str = "/tmp/greenference-node-volumes"
+    runtime_state_path: str = "/tmp/greencompute-node-runtime-state.json"
+    artifact_cache_dir: str = "/tmp/greencompute-node-artifacts"
+    volume_base_dir: str = "/tmp/greencompute-node-volumes"
 
     # Remote control-plane URL (Phase 1: HTTP client, no in-process import)
     control_plane_url: str = "http://127.0.0.1:8001"
@@ -31,7 +57,7 @@ class Settings(BaseModel):
     # Miner identity
     miner_hotkey: str = "node-local"
     miner_payout_address: str = "5FnodeLocal"
-    miner_auth_secret: str = "greenference-node-local-secret"
+    miner_auth_secret: str = "greencompute-node-local-secret"
     miner_api_base_url: str = "http://127.0.0.1:8007"
     miner_validator_url: str = "http://127.0.0.1:8002"
 
@@ -100,13 +126,13 @@ def load_settings() -> Settings:
         enable_background_workers=_env_bool("GREENFERENCE_ENABLE_BACKGROUND_WORKERS", False),
         worker_poll_interval_seconds=float(os.getenv("GREENFERENCE_WORKER_POLL_INTERVAL_SECONDS", "1.0")),
         bootstrap_miner=_env_bool("GREENFERENCE_BOOTSTRAP_MINER", False),
-        runtime_state_path=os.getenv("GREENFERENCE_RUNTIME_STATE_PATH", "/tmp/greenference-node-runtime-state.json"),
-        artifact_cache_dir=os.getenv("GREENFERENCE_ARTIFACT_CACHE_DIR", "/tmp/greenference-node-artifacts"),
-        volume_base_dir=os.getenv("GREENFERENCE_VOLUME_BASE_DIR", "/tmp/greenference-node-volumes"),
+        runtime_state_path=os.getenv("GREENFERENCE_RUNTIME_STATE_PATH", "/tmp/greencompute-node-runtime-state.json"),
+        artifact_cache_dir=os.getenv("GREENFERENCE_ARTIFACT_CACHE_DIR", "/tmp/greencompute-node-artifacts"),
+        volume_base_dir=os.getenv("GREENFERENCE_VOLUME_BASE_DIR", "/tmp/greencompute-node-volumes"),
         control_plane_url=os.getenv("GREENFERENCE_CONTROL_PLANE_URL", "http://127.0.0.1:8001"),
         miner_hotkey=miner_hotkey,
         miner_payout_address=os.getenv("GREENFERENCE_MINER_PAYOUT_ADDRESS", "5FnodeLocal"),
-        miner_auth_secret=os.getenv("GREENFERENCE_MINER_AUTH_SECRET", "greenference-node-local-secret"),
+        miner_auth_secret=os.getenv("GREENFERENCE_MINER_AUTH_SECRET", "greencompute-node-local-secret"),
         miner_api_base_url=os.getenv("GREENFERENCE_MINER_API_BASE_URL", "http://127.0.0.1:8007"),
         miner_validator_url=os.getenv("GREENFERENCE_MINER_VALIDATOR_URL", "http://127.0.0.1:8002"),
         node_id=os.getenv("GREENFERENCE_MINER_NODE_ID", default_node_id),

@@ -8,9 +8,9 @@ import tarfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from greenference_protocol import VolumeRecord
+from greencompute_protocol import VolumeRecord
 
-from greenference_node_agent.domain.disk import (
+from greencompute_node_agent.domain.disk import (
     DiskError,
     DiskMode,
     create_loop_volume,

@@ -6,7 +6,7 @@ import subprocess
 from datetime import UTC, datetime
 from typing import Any
 
-from greenference_protocol import UnifiedRuntimeRecord, WorkloadSpec
+from greencompute_protocol import UnifiedRuntimeRecord, WorkloadSpec
 
 
 def _utcnow() -> datetime:

@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from greenference_protocol import SecurityTier
+from greencompute_protocol import SecurityTier
 
 
 class AttestationEngine:

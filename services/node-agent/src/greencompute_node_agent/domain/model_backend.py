@@ -9,7 +9,7 @@ from collections import defaultdict
 from collections.abc import Iterator
 from typing import Any
 
-from greenference_protocol import ChatCompletionRequest
+from greencompute_protocol import ChatCompletionRequest
 
 
 class ModelBackendError(RuntimeError):

@@ -9,11 +9,11 @@ from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException, status
 
-from greenference_protocol import Heartbeat, MinerRegistration
+from greencompute_protocol import Heartbeat, MinerRegistration
 
-from greenference_node_agent.application.services import NodeAgentService
-from greenference_node_agent.config import load_settings
-from greenference_node_agent.transport.routes import router, set_service
+from greencompute_node_agent.application.services import NodeAgentService
+from greencompute_node_agent.config import load_settings
+from greencompute_node_agent.transport.routes import router, set_service
 
 logger = logging.getLogger(__name__)
 

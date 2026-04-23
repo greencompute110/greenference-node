@@ -12,9 +12,9 @@ from math import floor
 from pathlib import Path
 from typing import Any
 
-from greenference_protocol import UnifiedRuntimeRecord, WorkloadSpec
-from greenference_node_agent.domain.disk import DiskMode
-from greenference_node_agent.domain.gpu_docker import gpu_docker_flags
+from greencompute_protocol import UnifiedRuntimeRecord, WorkloadSpec
+from greencompute_node_agent.domain.disk import DiskMode
+from greencompute_node_agent.domain.gpu_docker import gpu_docker_flags
 
 # Path to the SSH bootstrap entrypoint script (mounted into every pod container)
 _ENTRYPOINT_PATH = Path(__file__).resolve().parents[4] / "infra" / "docker" / "entrypoint.sh"
@@ -72,7 +72,7 @@ class ProcessPodBackend(PodBackend):
         workload: WorkloadSpec,
     ) -> UnifiedRuntimeRecord:
         image = runtime.metadata.get("image") or workload.image
-        container_name = f"greenference-pod-{runtime.deployment_id[:12]}"
+        container_name = f"greencompute-pod-{runtime.deployment_id[:12]}"
 
         cmd: list[str] = [
             "docker", "run", "-d",
@@ -142,8 +142,8 @@ class ProcessPodBackend(PodBackend):
             entrypoint = f"{host_repo}/infra/docker/entrypoint.sh"
         else:
             entrypoint = str(_ENTRYPOINT_PATH)
-        cmd += ["-v", f"{entrypoint}:/greenference-entrypoint.sh:ro"]
-        cmd += ["--entrypoint", "/greenference-entrypoint.sh"]
+        cmd += ["-v", f"{entrypoint}:/greencompute-entrypoint.sh:ro"]
+        cmd += ["--entrypoint", "/greencompute-entrypoint.sh"]
 
         cmd.append(image)
 

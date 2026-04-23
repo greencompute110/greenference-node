@@ -9,13 +9,13 @@ from urllib.error import HTTPError, URLError
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from greenference_protocol import (
+from greencompute_protocol import (
     CapacityUpdate,
     Heartbeat,
     MinerRegistration,
 )
 
-from greenference_node_agent.transport.security import validate_optional_auth
+from greencompute_node_agent.transport.security import validate_optional_auth
 
 router = APIRouter()
 
@@ -171,7 +171,7 @@ def pod_stats(deployment_id: str) -> dict:
         # Runtime exists but not running — return empty stats rather than 404
         # so the UI can keep polling without flipping into an error state.
         return {}
-    from greenference_node_agent.domain.pod_stats import collect_pod_stats
+    from greencompute_node_agent.domain.pod_stats import collect_pod_stats
     gpu_devices = runtime.metadata.get("gpu_devices") or []
     try:
         gpu_device_ids = [int(d) for d in gpu_devices]

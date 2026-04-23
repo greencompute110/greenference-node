@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from greenference_node_agent.domain.gpu_docker import gpu_docker_flags
+from greencompute_node_agent.domain.gpu_docker import gpu_docker_flags
 
 logger = logging.getLogger(__name__)
 

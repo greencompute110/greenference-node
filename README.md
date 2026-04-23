@@ -1,4 +1,4 @@
-# greenference-node
+# greencompute-node
 
 Unified miner daemon for the Green Compute Bittensor subnet — **netuid 110 on mainnet**, **netuid 16 on testnet**. One process handles inference (vLLM + diffusion), GPU rental pods, and private VMs. No separate miner repos to run.
 
@@ -43,10 +43,10 @@ nvidia-smi | grep "Driver Version"
 ### clone
 
 ```bash
-mkdir greenference-ai && cd greenference-ai
-git clone https://github.com/greenference/greenference.git        # protocol
-git clone https://github.com/greenference/greenference-node.git   # this repo
-cd greenference-node
+mkdir greencompute-ai && cd greencompute-ai
+git clone https://github.com/greenference/greencompute.git        # protocol
+git clone https://github.com/greenference/greencompute-node.git   # this repo
+cd greencompute-node
 ```
 
 ### configure
@@ -132,9 +132,9 @@ Required for gated models. Get a read token at https://huggingface.co/settings/t
 ## directory structure
 
 ```
-greenference-node/
+greencompute-node/
 ├── services/node-agent/          # agent source (Python FastAPI + worker loop)
-│   └── src/greenference_node_agent/
+│   └── src/greencompute_node_agent/
 │       ├── application/services.py  # reconcile loop
 │       ├── domain/
 │       │   ├── inference.py         # vLLM / diffusion container orchestration

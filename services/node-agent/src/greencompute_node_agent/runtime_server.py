@@ -9,8 +9,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from greenference_protocol import ChatCompletionRequest, ChatCompletionResponse
-from greenference_node_agent.domain.model_backend import create_text_generation_backend
+from greencompute_protocol import ChatCompletionRequest, ChatCompletionResponse
+from greencompute_node_agent.domain.model_backend import create_text_generation_backend
 
 
 class RuntimeRequestHandler(BaseHTTPRequestHandler):

@@ -6,7 +6,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from greenference_protocol import (
+from greencompute_protocol import (
     CapacityUpdate,
     ControlPlaneHTTPClient,
     ControlPlaneHTTPError,
@@ -23,8 +23,8 @@ from greenference_protocol import (
     WorkloadSpec,
 )
 
-from greenference_node_agent.config import Settings
-from greenference_node_agent.domain.inference import (
+from greencompute_node_agent.config import Settings
+from greencompute_node_agent.domain.inference import (
     ArtifactBundle,
     DockerInferenceBackend,
     InferenceRuntimeError,
@@ -32,13 +32,13 @@ from greenference_node_agent.domain.inference import (
     ProcessInferenceBackend,
     StagedArtifactStore,
 )
-from greenference_node_agent.domain.gpu_allocator import GpuAllocationError, GpuAllocator
-from greenference_node_agent.domain.disk import detect_disk_mode
-from greenference_node_agent.domain.pod import PodError, ProcessPodBackend, StubPodBackend
-from greenference_node_agent.domain.ssh import SSHError, build_ssh_access, choose_free_port, generate_ssh_keypair, is_port_free
-from greenference_node_agent.domain.vm import FirecrackerVMBackend, StubVMBackend, VMError
-from greenference_node_agent.domain.volume import LocalVolumeManager, VolumeError
-from greenference_node_agent.infrastructure.repository import NodeAgentRepository
+from greencompute_node_agent.domain.gpu_allocator import GpuAllocationError, GpuAllocator
+from greencompute_node_agent.domain.disk import detect_disk_mode
+from greencompute_node_agent.domain.pod import PodError, ProcessPodBackend, StubPodBackend
+from greencompute_node_agent.domain.ssh import SSHError, build_ssh_access, choose_free_port, generate_ssh_keypair, is_port_free
+from greencompute_node_agent.domain.vm import FirecrackerVMBackend, StubVMBackend, VMError
+from greencompute_node_agent.domain.volume import LocalVolumeManager, VolumeError
+from greencompute_node_agent.infrastructure.repository import NodeAgentRepository
 
 logger = logging.getLogger(__name__)
 
@@ -452,7 +452,7 @@ class NodeAgentService:
         # Resolve image from template or workload
         image = workload.image
         if not image and template_name:
-            from greenference_node_agent.domain.templates import get_template
+            from greencompute_node_agent.domain.templates import get_template
             tpl = get_template(template_name)
             if tpl:
                 image = tpl.image
@@ -569,7 +569,7 @@ class NodeAgentService:
 
     def invoke_inference(self, deployment_id: str, payload: Any) -> Any:
         """Invoke chat completions on an inference runtime."""
-        from greenference_protocol import ChatCompletionRequest
+        from greencompute_protocol import ChatCompletionRequest
         runtime = self.repository.get_runtime(deployment_id)
         if runtime is None:
             return None

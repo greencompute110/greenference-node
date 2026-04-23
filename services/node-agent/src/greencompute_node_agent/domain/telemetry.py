@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from greenference_protocol import NodeCapability, SecurityTier
+from greencompute_protocol import NodeCapability, SecurityTier
 
 
 def _utcnow() -> datetime:
