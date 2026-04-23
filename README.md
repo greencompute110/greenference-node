@@ -94,7 +94,7 @@ curl http://localhost:8007/readyz
 |---|---|---|
 | `vllm` | `vllm/vllm-openai:v0.19.1-cu130-ubuntu2404` | Qwen 2.5, Llama 3, Mistral, Phi |
 | `vllm-vision` | `vllm/vllm-openai:v0.19.1-cu130-ubuntu2404` | Qwen2-VL, LLaVA, Phi-3.5-vision |
-| `diffusion` | `greencompute110/diffusion-server:latest` | SDXL, FLUX, SD3 |
+| `diffusion` | `ghcr.io/greencompute110/diffusion:latest` | SDXL, FLUX, SD3 |
 
 All inference images are CUDA 13 → **NVIDIA driver 545+ required**.
 
