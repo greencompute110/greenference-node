@@ -2,6 +2,18 @@ services:
   node-agent:
     image: python:3.12-slim
     working_dir: /app/node
+    # GPU access for nvidia-smi-based auto-detection of the right vLLM
+    # image (cu130 vs cu12) — without this the auto-detect falls through
+    # to the cu130 default. Requires nvidia-container-toolkit on the host
+    # (already needed since you spawn vLLM containers from this miner).
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     volumes:
       - ./:/app/node
       - ${PROTOCOL_DIR:-../greencompute/protocol}:/app/protocol
@@ -45,6 +57,14 @@ services:
       GREENCOMPUTE_ATTESTATION_ENABLED: "${GREENCOMPUTE_ATTESTATION_ENABLED:-false}"
       # Workload kinds
       GREENCOMPUTE_SUPPORTED_WORKLOAD_KINDS: "${GREENCOMPUTE_SUPPORTED_WORKLOAD_KINDS:-inference,pod,vm}"
+      # vLLM image override (per-host, useful when GPU/driver combos differ).
+      # Leave blank to let node-agent auto-pick from nvidia-smi at startup.
+      GREENCOMPUTE_VLLM_IMAGE: "${GREENCOMPUTE_VLLM_IMAGE:-}"
+      # Required for nvidia-container-toolkit to inject `nvidia-smi` and
+      # libcuda into the container — needed by the auto-image-pick logic.
+      # `utility` is enough; we don't compute on GPU here.
+      NVIDIA_VISIBLE_DEVICES: "all"
+      NVIDIA_DRIVER_CAPABILITIES: "utility"
       # SSH
       GREENCOMPUTE_SSH_HOST: "${GREENCOMPUTE_SSH_HOST:-0.0.0.0}"
       GREENCOMPUTE_SSH_PORT_RANGE_START: "${GREENCOMPUTE_SSH_PORT_RANGE_START:-30000}"

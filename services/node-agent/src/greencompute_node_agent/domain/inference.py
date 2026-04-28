@@ -462,6 +462,65 @@ class ProcessInferenceBackend(InferenceBackend):
             ) from exc
 
 
+_VLLM_CU130_IMAGE = "vllm/vllm-openai:v0.19.1-cu130-ubuntu2404"
+_VLLM_CU12_IMAGE = "vllm/vllm-openai:v0.8.5"
+
+
+def _auto_select_vllm_image() -> str:
+    """Pick a vLLM image based on this host's NVIDIA driver + GPU arch.
+
+    Logic:
+      - sm_120 (RTX 5090 / Blackwell) → cu130 image (mandatory; older vLLM
+        doesn't have Blackwell kernels). Driver MUST be >= 580.
+      - sm_89 (RTX 4090 / Ada) or older → driver-aware:
+          driver >= 580 → cu130 image (newer is fine)
+          driver  < 580 → cu12 image (older vLLM, avoids the
+            'forward compatibility on non supported HW' error 804)
+
+    Falls back to cu130 if nvidia-smi isn't available — gives a clear
+    signal at container start instead of silently picking wrong.
+    """
+    import shutil
+    import subprocess
+
+    if not shutil.which("nvidia-smi"):
+        return _VLLM_CU130_IMAGE
+    try:
+        out = subprocess.check_output(
+            [
+                "nvidia-smi",
+                "--query-gpu=compute_cap,driver_version",
+                "--format=csv,noheader,nounits",
+            ],
+            timeout=3,
+            text=True,
+        ).strip()
+    except (subprocess.SubprocessError, OSError):
+        return _VLLM_CU130_IMAGE
+
+    max_compute = 0.0
+    min_driver_major = 9999
+    for line in out.splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 2:
+            continue
+        try:
+            cc = float(parts[0])
+            drv_major = int(parts[1].split(".")[0])
+        except (ValueError, IndexError):
+            continue
+        max_compute = max(max_compute, cc)
+        min_driver_major = min(min_driver_major, drv_major)
+
+    # sm_120+ (Blackwell, e.g. RTX 5090) → must use cu130
+    if max_compute >= 12.0:
+        return _VLLM_CU130_IMAGE
+    # Pre-Blackwell + older driver → fall back to cu12 to avoid error 804
+    if min_driver_major < 580 and min_driver_major != 9999:
+        return _VLLM_CU12_IMAGE
+    return _VLLM_CU130_IMAGE
+
+
 class DockerInferenceBackend(InferenceBackend):
     """Launches inference as a Docker container running vLLM or diffusion server."""
 
@@ -480,12 +539,12 @@ class DockerInferenceBackend(InferenceBackend):
     ) -> None:
         self.backend_name = backend_name
         self.health_timeout_seconds = health_timeout_seconds
-        self.default_image = default_image or os.environ.get(
-            "GREENCOMPUTE_VLLM_IMAGE",
-            # v0.19.1 with CUDA 13.0 — Blackwell/sm_120 (RTX 5090) support
-            # + handles recent model archs that 0.7.3 lacks.
-            "vllm/vllm-openai:v0.19.1-cu130-ubuntu2404",
-        )
+        # Image resolution priority:
+        #   1. explicit constructor arg
+        #   2. GREENCOMPUTE_VLLM_IMAGE env var (manual override)
+        #   3. auto-detection from nvidia-smi (compute_cap + driver_major)
+        env_override = os.environ.get("GREENCOMPUTE_VLLM_IMAGE")
+        self.default_image = default_image or env_override or _auto_select_vllm_image()
         self.gpu_memory_utilization = gpu_memory_utilization
 
     @staticmethod
