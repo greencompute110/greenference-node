@@ -304,6 +304,14 @@ class NodeAgentService:
         runtime_manifest = {
             "runtime_kind": runtime_kind,
             "model_identifier": model_id,
+            # vLLM is started with `--model <model_identifier>` (the HF repo
+            # path like "meta-llama/Llama-3.2-1B-Instruct") so it loads
+            # weights from the right place. But the gateway forwards
+            # /v1/chat/completions with the workload's slug name (e.g.
+            # "meta-llama-Llama-3.2-1B-Instruct"); without an alias vLLM
+            # 404s on the slug. Surface workload.name here so inference.py
+            # can pass it as --served-model-name and accept both.
+            "serve_as_name": workload.name,
             "model_revision": workload.metadata.get("model_revision"),
             "tokenizer_identifier": workload.metadata.get("tokenizer_identifier"),
             "seed_corpus": workload.metadata.get("seed_corpus", [

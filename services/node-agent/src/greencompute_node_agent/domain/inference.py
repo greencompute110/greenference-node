@@ -650,6 +650,19 @@ class DockerInferenceBackend(InferenceBackend):
                 "--trust-remote-code",
             ]
 
+            # --served-model-name aliases the model so callers can request
+            # it under either the HF id (model_id, e.g.
+            # "meta-llama/Llama-3.2-1B-Instruct") or the platform slug
+            # (workload.name, e.g. "meta-llama-Llama-3.2-1B-Instruct") that
+            # the gateway forwards. Without this, vLLM 404s on the slug
+            # because it only serves under the HF id.
+            runtime_manifest = artifact.payload.get("runtime_manifest", {})
+            serve_as = runtime_manifest.get("serve_as_name") if isinstance(runtime_manifest, dict) else None
+            served_names = [model_id]
+            if isinstance(serve_as, str) and serve_as and serve_as != model_id:
+                served_names.append(serve_as)
+            cmd += ["--served-model-name", *served_names]
+
             # Optional: tensor parallel for multi-GPU
             tp_size = artifact.payload.get("tensor_parallel_size")
             if tp_size and int(tp_size) > 1:
